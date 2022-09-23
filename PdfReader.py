@@ -1,3 +1,5 @@
+import datetime
+import logging
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from io import StringIO
 from pdfminer.pdfinterp import PDFResourceManager
@@ -13,6 +15,10 @@ keyWordList = ['社会责任', '社会', '责任']
 
 pool = ThreadPoolExecutor(max_workers=20, thread_name_prefix='read_pdf_')
 
+# logging.propagate = False
+# logging.getLogger().setLevel(logging.ERROR)
+
+dataformat = '%Y-%m-%d %H:%M:%S'
 
 def open_file(file_name):
     # Use a breakpoint in the code line below to debug your script.
@@ -26,7 +32,7 @@ def open_file(file_name):
         print("当前目录:" + file_name)
         if os.path.isdir(fileN):
             print(fileN)
-            open_file(fileN)
+            listResult.extend(open_file(fileN))
         else:
             (filepath, tempfilename) = os.path.split(fileN)
             print("路径:" + filepath)
@@ -34,15 +40,15 @@ def open_file(file_name):
             (shotname, extension) = os.path.splitext(tempfilename)
             print("shotname:" + shotname)
             print("extension:" + extension)
-            if extension == ".pdf":
+            if extension == ".pdf" or extension == ".PDF":
                 print("源文件:" + fileN)
-                future = pool.submit(readPdf, fileN, shotname, tempfilename)
-                listResult.append(future)
+                listResult.append(pool.submit(readPdf, fileN, shotname, tempfilename))
 
     return listResult
 
 
 def readPdf(file_path, shotname, tempfilename):
+    print(datetime.datetime.now().strftime(dataformat) + ': 开始读取pdf文件:-------' + shotname + '\n')
     listResult = []
     with open(file_path, 'rb') as file:
         resource_manager = PDFResourceManager()
@@ -54,11 +60,13 @@ def readPdf(file_path, shotname, tempfilename):
         content = return_str.getvalue()
         _content = content.replace('\n', '')
         createTxtFile(file_name, shotname, _content)
-
+        print(datetime.datetime.now().strftime(dataformat) + ': 读取pdf文件结束:--------' + shotname + '\n')
         for key in keyWordList:
+            print(datetime.datetime.now().strftime(dataformat) + ': ' + shotname + ':开始关键字搜索:-----------' + key + '\n')
             # 定义对象保存
             readResult = ReadResult(tempfilename, key, content.count(key))
             listResult.append(readResult)
+            print(datetime.datetime.now().strftime(dataformat) + ': ' + shotname + ':关键字搜索结束,----------关键字:' + key + ',-----------出现次数:' + str(readResult.count) + '\n')
         return listResult
 
 
@@ -69,7 +77,8 @@ def createTxtFile(path, filename, content):
 
 if __name__ == '__main__':
     file_name = input("请输入文件夹：")
-    tasks = open_file(file_name)
+    tasks = []
+    tasks.extend(open_file(file_name))
     wait(tasks, return_when=ALL_COMPLETED)
     listr = []
     for task in tasks:
