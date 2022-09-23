@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from io import StringIO
 from pdfminer.pdfinterp import PDFResourceManager
 from pdfminer.pdfinterp import process_pdf
@@ -9,6 +10,8 @@ import os
 from ReadResult import ReadResult
 
 keyWordList = ['社会责任', '社会', '责任']
+
+pool = ThreadPoolExecutor(max_workers=20, thread_name_prefix='read_pdf_')
 
 
 def open_file(file_name):
@@ -33,18 +36,14 @@ def open_file(file_name):
             print("extension:" + extension)
             if extension == ".pdf":
                 print("源文件:" + fileN)
-                content = readPdf(fileN)
-                createTxtFile(file_name,shotname, content)
-
-                for key in keyWordList:
-                    # 定义对象保存
-                    readResult = ReadResult(tempfilename, key, content.count(key))
-                    listResult.append(readResult)
+                future = pool.submit(readPdf, fileN, shotname, tempfilename)
+                listResult.append(future)
 
     return listResult
 
 
-def readPdf(file_path):
+def readPdf(file_path, shotname, tempfilename):
+    listResult = []
     with open(file_path, 'rb') as file:
         resource_manager = PDFResourceManager()
         return_str = StringIO()
@@ -52,7 +51,15 @@ def readPdf(file_path):
         device = TextConverter(resource_manager, return_str, laparams=lap_params)
         process_pdf(resource_manager, device, file)
         device.close()
-        return return_str.getvalue()
+        content = return_str.getvalue()
+        _content = content.replace('\n', '')
+        createTxtFile(file_name, shotname, _content)
+
+        for key in keyWordList:
+            # 定义对象保存
+            readResult = ReadResult(tempfilename, key, content.count(key))
+            listResult.append(readResult)
+        return listResult
 
 
 def createTxtFile(path, filename, content):
@@ -62,7 +69,12 @@ def createTxtFile(path, filename, content):
 
 if __name__ == '__main__':
     file_name = input("请输入文件夹：")
-    listr = open_file(file_name)
+    tasks = open_file(file_name)
+    wait(tasks, return_when=ALL_COMPLETED)
+    listr = []
+    for task in tasks:
+        listr.extend(task.result())
+
     wb = xlsxwriter.Workbook(file_name + '\\关键字统计.xlsx')
     ws = wb.add_worksheet('按文件统计结果')
     ws.activate()
